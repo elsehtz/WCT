@@ -1,0 +1,64 @@
+@model TournamentRepository
+@{
+    ViewData["Title"] = "Fixtures";
+    var results = Model.Recent();
+    var upcoming = Model.Upcoming();
+    var live = Model.Live();
+}
+
+@if (live.Any())
+{
+    <div class="panel mb">
+        <div class="panel-title"><span class="blink">●</span> in play · scores refresh on the daily sync</div>
+        @foreach (var m in live)
+        {
+            <a class="fixture" href="/Home/Match/@m.Id" style="text-decoration:none">
+                <span class="when">@m.StageLabel</span>
+                <span class="home"><span class="@m.Home.ColourClass">@m.Home.Name</span></span>
+                <span class="score">@m.HomeGoals&#8202;-&#8202;@m.AwayGoals</span>
+                <span><span class="@m.Away.ColourClass">@m.Away.Name</span></span>
+                <span class="stage">@(m.Status == MatchStatus.Paused ? "HT" : "LIVE")</span>
+            </a>
+        }
+    </div>
+}
+
+<div class="grid cols-2">
+    <div class="panel">
+        <div class="panel-title">results · played</div>
+        <div class="hint mb">click a fixture for the match centre &amp; possession heat-maps</div>
+        @foreach (var dayGroup in results.GroupBy(m => m.KickOff.Date).OrderByDescending(g => g.Key))
+        {
+            <div class="dim" style="margin:10px 0 2px;letter-spacing:1px">@dayGroup.Key.ToString("dddd dd MMM")</div>
+            @foreach (var m in dayGroup.OrderBy(m => m.KickOff))
+            {
+                <a class="fixture" href="/Home/Match/@m.Id" style="text-decoration:none">
+                    <span class="when">@m.StageLabel</span>
+                    <span class="home"><span class="@m.Home.ColourClass">@m.Home.Name</span></span>
+                    <span class="score">@m.HomeGoals&#8202;-&#8202;@m.AwayGoals</span>
+                    <span><span class="@m.Away.ColourClass">@m.Away.Name</span></span>
+                    <span class="stage">@(m.WentToPenalties ? $"({m.HomePenalties}-{m.AwayPenalties} pens)" : m.WentToExtraTime ? $"aet {m.HalfTimeLine}" : m.HalfTimeLine)</span>
+                </a>
+            }
+        }
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">incoming · scheduled</div>
+        <div class="hint mb">all times UTC</div>
+        @foreach (var dayGroup in upcoming.GroupBy(m => m.KickOff.Date).OrderBy(g => g.Key))
+        {
+            <div class="dim" style="margin:10px 0 2px;letter-spacing:1px">@dayGroup.Key.ToString("dddd dd MMM")</div>
+            @foreach (var m in dayGroup.OrderBy(m => m.KickOff))
+            {
+                <div class="fixture">
+                    <span class="when">@m.KickOff.ToString("HH:mm")</span>
+                    <span class="home"><a class="@m.Home.ColourClass" href="/Home/Team/@m.Home.Code">@m.Home.Name</a></span>
+                    <span class="vs">vs</span>
+                    <span><a class="@m.Away.ColourClass" href="/Home/Team/@m.Away.Code">@m.Away.Name</a></span>
+                    <span class="stage">@m.StageLabel · @m.Venue</span>
+                </div>
+            }
+        }
+    </div>
+</div>

@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "worldcup",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "WorldCupTerminal.csproj", "--urls", "http://localhost:5249"],
+      "port": 5249
+    },
+    {
+      "name": "worldcup-simulated",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "WorldCupTerminal.csproj", "--urls", "http://localhost:5249", "--LiveFeed:Enabled=false"],
+      "port": 5249
+    },
+    {
+      "name": "worldcup-fixtures",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "WorldCupTerminal.csproj", "--urls", "http://localhost:5249", "--LiveFeed:UseFixtureFiles=true"],
+      "port": 5249
+    },
+    {
+      "name": "worldcup-cachefallback",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "WorldCupTerminal.csproj", "--urls", "http://localhost:5249", "--LiveFeed:BaseUrl=http://127.0.0.1:9/", "--LiveFeed:StaleAfterHours=0"],
+      "port": 5249
+    }
+  ]
+}

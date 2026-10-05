@@ -1,0 +1,105 @@
+@model TournamentRepository
+@{
+    ViewData["Title"] = "Bracket";
+    bool live = Model.Mode != DataMode.Simulated;
+
+    var columns = new List<(Stage Stage, string Title)>();
+    if (Model.SlotsFor(Stage.RoundOf32).Any()) columns.Add((Stage.RoundOf32, "ROUND OF 32"));
+    columns.Add((Stage.RoundOf16, "ROUND OF 16"));
+    columns.Add((Stage.QuarterFinal, "QUARTER-FINALS"));
+    columns.Add((Stage.SemiFinal, "SEMI-FINALS"));
+    columns.Add((Stage.Final, "FINAL"));
+
+    void RenderTeam(Team? team, string placeholder, Match? match, bool isHome)
+    {
+        if (team is null)
+        {
+            <span class="tbd">@placeholder</span>
+        }
+        else
+        {
+            string result = "";
+            if (match is not null && match.Played)
+            {
+                int gf = isHome ? match.HomeGoals : match.AwayGoals;
+                result = match.WentToPenalties
+                    ? $"{gf} ({(isHome ? match.HomePenalties : match.AwayPenalties)})"
+                    : gf.ToString();
+            }
+            var winner = match?.Winner == team;
+            <span>
+                <a class="@team.ColourClass" href="/Home/Team/@team.Code">@team.Name</a>
+                @if (result.Length > 0)
+                {
+                    <span class="@(winner ? "res-w" : "muted")">@result</span>
+                }
+                else
+                {
+                    <span class="muted">(@placeholder)</span>
+                }
+            </span>
+        }
+    }
+
+    void RenderSlot(BracketSlot s, string? accent = null)
+    {
+        <div class="slot @(s.Match is not null ? "live" : "")" style="@(accent is null ? "" : $"border-left-color:var({accent})")">
+            <div class="slot-label">
+                @s.Label
+                @if (s.Match is not null)
+                {
+                    <text>· </text><a href="/Home/Match/@s.Match.Id">@s.Match.KickOff.ToString("dd MMM")</a>
+                    @if (s.Match.IsLive)
+                    {
+                        <span class="blink">●</span>
+                    }
+                }
+            </div>
+            <div class="team-line">@{ RenderTeam(s.Home, s.HomePlaceholder, s.Match, isHome: true); }</div>
+            <div class="team-line">@{ RenderTeam(s.Away, s.AwayPlaceholder, s.Match, isHome: false); }</div>
+        </div>
+    }
+}
+
+<div class="section-head">▚ Knockout Bracket &nbsp;<span class="hint">@(live ? "real pairings from the feed · unresolved ties show placeholders" : "round of 16 provisionally seeded from current group tables · later rounds resolve as results land")</span></div>
+
+<div class="bracket">
+    @foreach (var (stage, title) in columns)
+    {
+        <div class="bracket-col">
+            <h4>@title</h4>
+            @foreach (var s in Model.SlotsFor(stage))
+            {
+                if (stage == Stage.Final) { RenderSlot(s, "--amber"); }
+                else { RenderSlot(s); }
+            }
+            @if (stage == Stage.Final)
+            {
+                foreach (var s in Model.SlotsFor(Stage.ThirdPlace))
+                {
+                    <h4 class="mt">3RD PLACE</h4>
+                    RenderSlot(s);
+                }
+            }
+        </div>
+    }
+</div>
+
+<div class="panel mt">
+    <div class="panel-title">how the bracket works</div>
+    <p class="note">
+        @if (live)
+        {
+            <text>Pairings, dates and results come from the live feed on the daily sync. Ties that
+            depend on unplayed matches show placeholder codes (e.g. <span class="dim">QFW3</span> =
+            quarter-final 3 winner) until they resolve. Open any tie to view the match centre.</text>
+        }
+        else
+        {
+            <text>The round of 16 pairs each group winner (1X) against a runner-up (2Y) using the standard
+            cross-bracket pattern. Because match-day 3 has not been played, the qualifiers shown are
+            <span class="dim">provisional</span> — they reflect the live standings and will shift as the
+            final group games are decided. Open any seeded tie to view the match centre.</text>
+        }
+    </p>
+</div>

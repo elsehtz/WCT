@@ -1,0 +1,38 @@
+@model List<Team>
+@{
+    ViewData["Title"] = "Teams";
+}
+
+<div class="section-head">▚ Team Intelligence Index &nbsp;<span class="hint">stats &amp; tags derived from sentiment analysis of scouting prose + match data · click for full profile</span></div>
+
+@foreach (var group in Model.GroupBy(t => t.Group).OrderBy(g => g.Key))
+{
+    <div class="dim mb" style="letter-spacing:2px;margin-top:18px">GROUP @group.Key</div>
+    <div class="grid cols-2">
+        @foreach (var t in group.OrderByDescending(t => t.Stats.Overall))
+        {
+            <div class="panel">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+                    <div>
+                        <span class="code-chip">@t.Code</span>
+                        <a class="@t.ColourClass" style="font-size:16px" href="/Home/Team/@t.Code">@t.Name</a>
+                    </div>
+                    <span class="muted nowrap">#@t.FifaRank · ovr <span class="pts">@t.Stats.Overall.ToString("0.0")</span></span>
+                </div>
+                <div class="note mt" style="margin-top:4px">
+                    ▸ @t.Coach.Name
+                    @if (t.CoachIsForeign)
+                    {
+                        <span class="tag tag-info" title="Foreign coach">@t.Coach.Nationality</span>
+                    }
+                    else
+                    {
+                        <span class="muted">(@t.Coach.Nationality)</span>
+                    }
+                </div>
+                <div class="tags mt" style="margin-top:8px">@Html.Raw(TerminalArt.TagChipsHtml(t.Tags))</div>
+                <div class="mt" style="margin-top:10px">@Html.Raw(TerminalArt.StatBarsHtml(t.Stats, 22))</div>
+            </div>
+        }
+    </div>
+}

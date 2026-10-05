@@ -1,0 +1,110 @@
+@inject TournamentRepository Repo
+@inject SystemAlertProvider Alerts
+@{
+    var section = (ViewData["Section"] as string) ?? "dashboard";
+    string Active(string s) => section == s ? "active" : "";
+    var teamIndex = System.Text.Json.JsonSerializer.Serialize(
+        Repo.Teams.Select(t => new { code = t.Code, name = t.Name }));
+    var alerts = Alerts.Active;
+    var (feedDot, feedLabel) = Repo.Mode switch
+    {
+        DataMode.Live => ("feed-live", "LIVE FEED · daily sync"),
+        DataMode.CachedLive => ("feed-cached", "CACHED FEED"),
+        _ => ("feed-sim", "SIMULATED FEED"),
+    };
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WORLD CUP // TERMINAL</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="~/css/terminal.css" asp-append-version="true" />
+</head>
+<body>
+    <div class="scanlines" aria-hidden="true"></div>
+    <div class="term-window">
+        <div class="term-titlebar">
+            <span class="dots"><i class="d-red"></i><i class="d-amber"></i><i class="d-green"></i></span>
+            <span class="title-path">zak@worldcup: ~/fifa2026 — bash — 132&#215;44</span>
+            @if (alerts.Any())
+            {
+                <span class="titlebar-warnings">
+                    @foreach (var alert in alerts)
+                    {
+                        var sev = alert.Severity == "error" ? "sev-error" : "sev-warn";
+                        <span class="warn-chip @sev" title="@alert.Detail (click for details)">
+                            <span class="ic">⚠</span> @alert.Message
+                        </span>
+                    }
+                </span>
+            }
+            <span class="title-right" id="clock">--:--:--</span>
+        </div>
+
+        <div class="term-body">
+            <div class="banner">
+                <div class="banner-title">FIFA&nbsp;WORLD&nbsp;CUP <span class="banner-year">2026</span></div>
+                <div class="banner-sub">// live tables · fixtures · possible brackets · sentiment-driven team intelligence</div>
+            </div>
+
+            <nav class="cmdbar">
+                <span class="prompt">visitor@wc26:~$</span>
+                <a class="tab @Active("dashboard")" href="/Home/Index">dashboard</a>
+                <a class="tab @Active("fixtures")" href="/Home/Fixtures">fixtures</a>
+                <a class="tab @Active("bracket")" href="/Home/Bracket">bracket</a>
+                <a class="tab @Active("teams")" href="/Home/Teams">teams</a>
+                <input id="cmd" class="cmd-input" type="text" spellcheck="false"
+                       placeholder='type: open BRA · match · bracket · help' autocomplete="off" />
+            </nav>
+
+            <main class="content">
+                @RenderBody()
+            </main>
+
+            <footer class="statusbar">
+                <span class="blink @feedDot">●</span> @feedLabel
+                <span class="sep">│</span> 2026 FIFA WORLD CUP @(Repo.Mode == DataMode.Simulated ? "(representative dataset)" : "")
+                <span class="sep">│</span> <span class="muted">analysis: lexicon-sentiment v1 · @Repo.Teams.Count teams · @Repo.Groups.Count() groups</span>
+                <span class="status-right muted">press <kbd>/</kbd> to focus command</span>
+            </footer>
+        </div>
+    </div>
+    @if (alerts.Any())
+    {
+        <div class="modal-overlay" id="alertModal" data-autoshow="@(section == "dashboard" ? "1" : "0")" hidden>
+            <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="alertTitle">
+                <div class="modal-titlebar">
+                    <span class="dots"><i class="d-red"></i><i class="d-amber"></i><i class="d-green"></i></span>
+                    <span id="alertTitle">system://alerts — @alerts.Count active</span>
+                    <button type="button" class="modal-x" data-close aria-label="dismiss">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="modal-intro"><span class="blink">⚠</span> SYSTEM NOTICE — the following are active:</div>
+                    <ul class="alert-list">
+                        @foreach (var alert in alerts)
+                        {
+                            var sev = alert.Severity == "error" ? "sev-error" : "sev-warn";
+                            <li class="alert-row @sev">
+                                <span class="alert-glyph">@(alert.Severity == "error" ? "✖" : "⚠")</span>
+                                <div>
+                                    <div class="alert-msg">@alert.Message</div>
+                                    <div class="alert-detail">@alert.Detail</div>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </div>
+                <div class="modal-actions">
+                    <span class="muted">press <kbd>esc</kbd> or</span>
+                    <button type="button" class="term-btn" data-close>[ acknowledge ]</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <script>window.__TEAMS__ = @Html.Raw(teamIndex);</script>
+    <script src="~/js/terminal.js" asp-append-version="true"></script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+@model Team
+@inject TournamentRepository Repo
+@{
+    ViewData["Title"] = Model.Name;
+    var t = Model;
+    var fixtures = Repo.MatchesFor(t);
+    var standing = Repo.Table(t.Group).FirstOrDefault(r => r.Team == t);
+    var momentum = Repo.Momentum(t);
+    var sent = t.Sentiment;
+    double sMax = Math.Max(1, sent.Raw.Values.DefaultIfEmpty(1).Max());
+
+    (StatDimension dim, string label, string cls)[] sdims =
+    {
+        (StatDimension.Offense, "offense", "d-off"),
+        (StatDimension.Defense, "defense", "d-def"),
+        (StatDimension.Aggression, "aggression", "d-agg"),
+        (StatDimension.Technical, "technical", "d-tec"),
+        (StatDimension.Chemistry, "chemistry", "d-che"),
+    };
+}
+
+<a class="back-link dim" href="/Home/Teams">‹ all teams</a>
+
+<div class="panel mt">
+    <div class="panel-title">profile</div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+        <div>
+            <span class="code-chip">@t.Code</span>
+            <span class="@t.ColourClass" style="font-size:26px;font-weight:700">@t.Name</span>
+            <span class="muted">· group @t.Group · @t.Confederation</span>
+        </div>
+        <div class="muted nowrap">FIFA #@t.FifaRank · squad age @t.AverageAge.ToString("0.0") · OVR <span class="pts">@t.Stats.Overall.ToString("0.0")</span></div>
+    </div>
+    <div class="note mt" style="margin-top:6px">
+        ▸ head coach <span class="lead">@t.Coach.Name</span>
+        @if (t.CoachIsForeign)
+        {
+            <span class="tag tag-info" title="Foreign coach: not a native of @t.Country">FOREIGN · @t.Coach.Nationality</span>
+        }
+        else
+        {
+            <span class="muted">(@t.Coach.Nationality)</span>
+        }
+        @if (standing is not null)
+        {
+            <span class="muted"> · currently P@(standing.Played) W@(standing.Won) D@(standing.Drawn) L@(standing.Lost) · @standing.Points pts (pos @standing.Position)</span>
+        }
+    </div>
+    <div class="note mt" style="margin-top:8px">@t.StyleNote</div>
+    <div class="tags mt" style="margin-top:10px">@Html.Raw(TerminalArt.TagChipsHtml(t.Tags))</div>
+</div>
+
+<div class="grid cols-2 mt">
+    <div class="panel">
+        <div class="panel-title">attribute radar</div>
+        <div class="grid cols-2" style="align-items:center;gap:10px">
+            <pre class="ascii cyan">@TerminalArt.RadarBraille(t.Stats)</pre>
+            <div>@Html.Raw(TerminalArt.StatBarsHtml(t.Stats, 22))</div>
+        </div>
+        <div class="hint mt">radar axes clockwise from top: OFF · TEC · AGG · DEF · CHE</div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">possession heat-map</div>
+        <div class="heatmap">@Html.Raw(TerminalArt.HeatMapHtml(TerminalArt.PossessionField(t)))</div>
+        <div class="pitch-ends"><span>◄ own goal</span><span>avg possession @t.AvgPossession.ToString("0")% · attacking ▶</span></div>
+        <div class="heat-legend">
+            low <span class="hm1">░</span><span class="hm2">▒</span><span class="hm3">▒</span><span class="hm4">▓</span><span class="hm5">█</span> high
+            · territory model: @t.Archetype
+        </div>
+    </div>
+</div>
+
+<div class="grid cols-2 mt">
+    <div class="panel">
+        <div class="panel-title">sentiment engine · signal breakdown</div>
+        <div class="hint mb">raw lexicon signal per dimension (before cross-field normalisation)</div>
+        @foreach (var (dim, label, cls) in sdims)
+        {
+            <div class="statrow">
+                <span class="stat-lbl">@label</span>
+                <span class="stat-bar">@Html.Raw(TerminalArt.BarHtml(Math.Max(0, sent.Get(dim)), sMax, 22, cls))</span>
+                <span class="stat-val">@sent.Get(dim).ToString("0.0")</span>
+            </div>
+        }
+        <dl class="kv mt" style="margin-top:12px">
+            <dt>overall tone</dt><dd>@((sent.Polarity * 100).ToString("0"))% positive</dd>
+            <dt>positive hits</dt><dd class="d-che">@sent.PositiveHits</dd>
+            <dt>negative hits</dt><dd class="d-off">@sent.NegativeHits</dd>
+            <dt>tokens scanned</dt><dd>@sent.Tokens</dd>
+        </dl>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">momentum &amp; record</div>
+        <div class="hint mb">cumulative goal difference across played matches</div>
+        <pre class="ascii amber">@TerminalArt.LineChartBraille(momentum)</pre>
+        <dl class="kv mt" style="margin-top:10px">
+            <dt>goals for / against</dt><dd>@t.GoalsFor / @t.GoalsAgainst</dd>
+            <dt>halves (1st / 2nd)</dt><dd>@t.FirstHalfGoals / @t.SecondHalfGoals scored</dd>
+            <dt>set-piece goals</dt><dd>@t.SetPieceGoals</dd>
+            <dt>clean sheets</dt><dd>@t.CleanSheets</dd>
+            <dt>comebacks</dt><dd>@t.Comebacks</dd>
+            <dt>disciplinary</dt><dd>@t.Cards cards</dd>
+        </dl>
+    </div>
+</div>
+
+<div class="panel mt">
+    <div class="panel-title">squad · scouting notes</div>
+    <table class="term squad">
+        <thead>
+            <tr><th>#</th><th>pos</th><th>player</th><th>club</th><th class="num">age</th><th>scouting report</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var p in t.Players.OrderBy(p => p.Position))
+            {
+                <tr>
+                    <td class="pnum">@p.Number</td>
+                    <td class="pos-@p.Position">@p.Position</td>
+                    <td class="nowrap">@p.Name</td>
+                    <td class="muted nowrap">@p.Club</td>
+                    <td class="num">@p.Age</td>
+                    <td class="note">@string.Join(" ", p.ScoutNotes)</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<div class="panel mt">
+    <div class="panel-title">fixtures</div>
+    @foreach (var m in fixtures)
+    {
+        var opp = m.Home == t ? m.Away : m.Home;
+        var homeAway = m.Home == t ? "H" : "A";
+        <div class="fixture" style="grid-template-columns:60px 24px 1fr auto 90px">
+            <span class="when">@m.KickOff.ToString("dd MMM")</span>
+            <span class="muted">@homeAway</span>
+            <span><a class="@opp.ColourClass" href="/Home/Team/@opp.Code">@opp.Name</a></span>
+            @if (m.Played)
+            {
+                int gf = m.Home == t ? m.HomeGoals : m.AwayGoals;
+                int ga = m.Home == t ? m.AwayGoals : m.HomeGoals;
+                var rc = gf > ga ? "res-w" : gf < ga ? "res-l" : "res-d";
+                <span class="score"><a href="/Home/Match/@m.Id" class="@rc">@gf–@ga</a></span>
+            }
+            else
+            {
+                <span class="score vs">vs</span>
+            }
+            <span class="stage">@m.StageLabel</span>
+        </div>
+    }
+</div>

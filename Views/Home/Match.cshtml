@@ -1,0 +1,221 @@
+@model Match
+@inject TournamentRepository Repo
+@{
+    ViewData["Title"] = "Match Centre";
+    var m = Model;
+    bool hasDetail = m.Played || m.IsLive;
+    int hb = (int)Math.Round(m.HomePossession / 100.0 * 48);
+    var homeField = TerminalArt.PossessionField(m.Home, hasDetail ? m : null);
+    var awayField = TerminalArt.PossessionField(m.Away, hasDetail ? m : null);
+
+    var rows = new List<(string label, string h, string a)>
+    {
+        ("Goals",           m.HomeGoals.ToString(),         m.AwayGoals.ToString()),
+        ("1st-half goals",  m.HomeFirstHalf.ToString(),     m.AwayFirstHalf.ToString()),
+        ("2nd-half goals",  m.HomeSecondHalf.ToString(),    m.AwaySecondHalf.ToString()),
+    };
+    if (m.WentToExtraTime)
+        rows.Add(("Extra-time goals", (m.HomeExtraTime ?? 0).ToString(), (m.AwayExtraTime ?? 0).ToString()));
+    if (m.WentToPenalties)
+        rows.Add(("Penalty shoot-out", (m.HomePenalties ?? 0).ToString(), (m.AwayPenalties ?? 0).ToString()));
+    rows.Add(("Set-piece goals", m.HomeSetPieceGoals.ToString(), m.AwaySetPieceGoals.ToString()));
+    rows.Add(("Possession %",    m.HomePossession.ToString(),    m.AwayPossession.ToString()));
+    rows.Add(("Cards",           m.HomeCards.ToString(),         m.AwayCards.ToString()));
+
+    string resultSuffix = m.WentToPenalties
+        ? $"pens {m.HomePenalties}–{m.AwayPenalties}"
+        : m.WentToExtraTime ? "aet" : "";
+
+    var kickOffIn = m.KickOff - Repo.Now;
+
+    string EventClass(MatchEvent e) => e.Type switch
+    {
+        MatchEventType.Goal or MatchEventType.Penalty or MatchEventType.OwnGoal => "ev-goal",
+        MatchEventType.YellowCard => "ev-card-y",
+        MatchEventType.SecondYellow or MatchEventType.RedCard => "ev-card-r",
+        _ => "ev-sub",
+    };
+    string EventGlyph(MatchEvent e) => e.Type switch
+    {
+        MatchEventType.Goal => "◉",
+        MatchEventType.Penalty => "◉ pen",
+        MatchEventType.OwnGoal => "◉ og",
+        MatchEventType.YellowCard => "▮",
+        MatchEventType.SecondYellow => "▮▮",
+        MatchEventType.RedCard => "▰",
+        _ => "⇄",
+    };
+}
+
+<a class="back-link dim" href="/Home/Fixtures">‹ back to fixtures</a>
+
+<div class="panel mt">
+    <div class="panel-title">@m.StageTitle · @m.KickOff.ToString("ddd dd MMM HH:mm") UTC · @m.Venue</div>
+    <div class="grid cols-3" style="align-items:center">
+        <div class="center">
+            <div style="font-size:20px"><a class="@m.Home.ColourClass" href="/Home/Team/@m.Home.Code">@m.Home.Name</a></div>
+            <div class="muted">@m.Home.Code · rank #@m.Home.FifaRank</div>
+        </div>
+        <div class="center">
+            @if (m.Played)
+            {
+                <div class="big-num" style="font-size:40px">@m.HomeGoals&#8202;–&#8202;@m.AwayGoals</div>
+                <div class="muted">half-time @m.HomeFirstHalf–@m.AwayFirstHalf @(resultSuffix.Length > 0 ? $"· {resultSuffix}" : "")</div>
+            }
+            else if (m.IsLive)
+            {
+                <div class="big-num" style="font-size:40px">@m.HomeGoals&#8202;–&#8202;@m.AwayGoals</div>
+                <div class="live-chip"><span class="blink">●</span> @(m.Status == MatchStatus.Paused ? "HALF-TIME" : "LIVE") · daily sync</div>
+            }
+            else
+            {
+                <div class="big-num" style="font-size:34px">vs</div>
+                <div class="muted">
+                    @(m.Status == MatchStatus.Postponed ? "postponed"
+                        : m.Status == MatchStatus.Cancelled ? "cancelled"
+                        : kickOffIn > TimeSpan.Zero
+                            ? $"kick-off in {(int)kickOffIn.TotalHours}h {kickOffIn.Minutes:00}m"
+                            : "scheduled")
+                </div>
+            }
+        </div>
+        <div class="center">
+            <div style="font-size:20px"><a class="@m.Away.ColourClass" href="/Home/Team/@m.Away.Code">@m.Away.Name</a></div>
+            <div class="muted">@m.Away.Code · rank #@m.Away.FifaRank</div>
+        </div>
+    </div>
+</div>
+
+@if (hasDetail)
+{
+    <div class="grid cols-2 mt">
+        <div class="panel">
+            <div class="panel-title">match statistics</div>
+            <table class="term">
+                <thead><tr><th class="num">@m.Home.Code</th><th class="center">metric</th><th class="num">@m.Away.Code</th></tr></thead>
+                <tbody>
+                    @foreach (var r in rows)
+                    {
+                        <tr>
+                            <td class="num">@r.h</td>
+                            <td class="center muted">@r.label</td>
+                            <td class="num">@r.a</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div class="mt">
+                <div class="hint">possession</div>
+                <div class="ascii" style="letter-spacing:-1px">
+@Html.Raw($"<span class=\"d-che\">{new string('█', hb)}</span><span class=\"d-def\">{new string('█', 48 - hb)}</span>")
+                </div>
+                <div class="pitch-ends">
+                    <span class="d-che">◧ @m.Home.Code @m.HomePossession%</span>
+                    <span class="d-def">@m.AwayPossession% @m.Away.Code ◨</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">match commentary</div>
+            <ul class="clean">
+                @foreach (var line in m.Commentary)
+                {
+                    <li class="note">▸ @line</li>
+                }
+            </ul>
+            @if (m.Played)
+            {
+                <div class="mt hint">winner: @(m.Winner is null ? "draw" : m.Winner.Name)</div>
+            }
+        </div>
+    </div>
+
+    @if (m.Events.Any())
+    {
+        <div class="panel mt">
+            <div class="panel-title">timeline · noteworthy</div>
+            <ul class="clean timeline">
+                @foreach (var e in m.Events)
+                {
+                    <li class="ev-row @EventClass(e)">
+                        <span class="ev-min">@(e.MinuteDisplay.Length > 0 ? e.MinuteDisplay : $"{e.Minute}'")</span>
+                        <span class="ev-glyph">@EventGlyph(e)</span>
+                        <span>@e.PlayerName</span>
+                        <span class="muted">@e.TeamCode@(e.Detail.Length > 0 ? $" · {e.Detail}" : "")</span>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+}
+
+@if (m.HomeLineup is not null || m.AwayLineup is not null)
+{
+    <div class="section-head mt">▚ Lineups &nbsp;<span class="hint">starting XI &amp; bench</span></div>
+    <div class="grid cols-2">
+        @foreach (var (team, lineup) in new[] { (m.Home, m.HomeLineup), (m.Away, m.AwayLineup) })
+        {
+            <div class="panel">
+                @if (lineup is null)
+                {
+                    <div class="panel-title"><span class="@team.ColourClass">@team.Name</span> · lineup</div>
+                    <div class="hint">lineup unavailable</div>
+                }
+                else
+                {
+                    <div class="panel-title"><span class="@team.ColourClass">@team.Name</span> · @lineup.Formation</div>
+                    <table class="term squad">
+                        <tbody>
+                            @foreach (var p in lineup.Starters)
+                            {
+                                <tr>
+                                    <td class="pnum">@p.Number</td>
+                                    <td class="pos-@p.Position">@p.Position</td>
+                                    <td class="nowrap">@p.Name</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    @if (lineup.Bench.Any())
+                    {
+                        <div class="hint mt">bench</div>
+                        <div class="note muted bench-list">
+                            @string.Join(" · ", lineup.Bench.Select(p => $"#{p.Number} {p.Name}"))
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+}
+else if (!hasDetail)
+{
+    <div class="panel mt">
+        <div class="panel-title">lineups</div>
+        <div class="hint">lineups TBA — announced around kick-off and picked up by the next daily sync</div>
+    </div>
+}
+
+<div class="section-head mt">▚ Possession Heat-Maps &nbsp;<span class="hint">territory intensity · cold ░ → hot █ · both teams attacking ▶@(hasDetail ? " · modelled from the real possession share" : "")</span></div>
+<div class="grid cols-2">
+    <div class="panel">
+        <div class="panel-title"><span class="@m.Home.ColourClass">@m.Home.Name</span> · territory</div>
+        <div class="heatmap">@Html.Raw(TerminalArt.HeatMapHtml(homeField))</div>
+        <div class="pitch-ends"><span>◄ own goal</span><span>attacking ▶</span></div>
+        <div class="heat-legend">
+            low <span class="hm1">░</span><span class="hm2">▒</span><span class="hm3">▒</span><span class="hm4">▓</span><span class="hm5">█</span> high
+            · style: @m.Home.Archetype
+        </div>
+    </div>
+    <div class="panel">
+        <div class="panel-title"><span class="@m.Away.ColourClass">@m.Away.Name</span> · territory</div>
+        <div class="heatmap">@Html.Raw(TerminalArt.HeatMapHtml(awayField))</div>
+        <div class="pitch-ends"><span>◄ own goal</span><span>attacking ▶</span></div>
+        <div class="heat-legend">
+            low <span class="hm1">░</span><span class="hm2">▒</span><span class="hm3">▒</span><span class="hm4">▓</span><span class="hm5">█</span> high
+            · style: @m.Away.Archetype
+        </div>
+    </div>
+</div>

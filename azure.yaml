@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: site-filevisualizer
+metadata:
+    template: azd-init@1.25.6
+services:
+    site-filevisualizer:
+        project: WorldCupTerminal.csproj
+        host: containerapp
+        language: dotnet
+resources:
+    site-filevisualizer:
+        type: host.containerapp
+        port: 8080

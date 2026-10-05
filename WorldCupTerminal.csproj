@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>WorldCupTerminal</RootNamespace>
+    <AssemblyName>WorldCupTerminal</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- The Aspire projects live in subfolders of this (root-level) web project; keep their
+         source out of this project's default globs. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);WorldCupTerminal.AppHost\**;WorldCupTerminal.ServiceDefaults\**</DefaultItemExcludes>
+    <UserSecretsId>edf2b66e-0fba-413f-94bd-9e4d54d69087</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="WorldCupTerminal.ServiceDefaults\WorldCupTerminal.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+</Project>

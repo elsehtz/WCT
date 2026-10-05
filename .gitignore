@@ -1,0 +1,30 @@
+# Build output
+bin/
+obj/
+
+# Azure Developer CLI
+.azure/
+
+# User-specific files
+*.user
+*.suo
+.vs/
+
+# Rider
+.idea/
+
+# Environment / secrets
+.env
+appsettings.*.json
+!appsettings.json
+!appsettings.Development.json
+
+# Live-feed scrape cache (regenerated at runtime)
+App_Data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json

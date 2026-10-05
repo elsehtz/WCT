@@ -1,0 +1,105 @@
+@model TournamentRepository
+@{
+    ViewData["Title"] = "Dashboard";
+    var played = Model.Recent().Count;
+    var goals = Model.Matches.Where(m => m.Played).Sum(m => m.HomeGoals + m.AwayGoals);
+    var avg = played == 0 ? 0 : (double)goals / played;
+    var foreignCoaches = Model.Teams.Count(t => t.CoachIsForeign);
+    var topAttack = Model.Teams.OrderByDescending(t => t.Stats.Offense).First();
+    var topDefense = Model.Teams.OrderByDescending(t => t.Stats.Defense).First();
+    var topOverall = Model.Teams.OrderByDescending(t => t.Stats.Overall).Take(6).ToList();
+}
+
+<div class="grid cols-4 mb">
+    <div class="panel center">
+        <div class="panel-title">matches</div>
+        <div class="big-num">@played</div>
+        <div class="muted">played · @Model.Upcoming().Count upcoming</div>
+    </div>
+    <div class="panel center">
+        <div class="panel-title">goals</div>
+        <div class="big-num">@goals</div>
+        <div class="muted">@avg.ToString("0.00") per match</div>
+    </div>
+    <div class="panel center">
+        <div class="panel-title">top attack</div>
+        <div class="big-num"><a class="@topAttack.ColourClass" href="/Home/Team/@topAttack.Code">@topAttack.Code</a></div>
+        <div class="muted">offense @topAttack.Stats.Offense.ToString("0.0")</div>
+    </div>
+    <div class="panel center">
+        <div class="panel-title">foreign coaches</div>
+        <div class="big-num">@foreignCoaches</div>
+        <div class="muted">of @Model.Teams.Count benches</div>
+    </div>
+</div>
+
+<div class="section-head">▚ Group Stage · Standings &nbsp;<span class="hint">@(Model.Groups.Count() > 8 ? "top two of each group + the eight best third-placed sides advance (top two highlighted)" : "top two of each group advance (highlighted)")</span></div>
+<div class="grid cols-4">
+    @foreach (var g in Model.Groups)
+    {
+        <div class="panel">
+            <div class="panel-title">group @g</div>
+            <table class="term">
+                <thead>
+                    <tr>
+                        <th>#</th><th>team</th>
+                        <th class="num">P</th><th class="num">GD</th><th class="num">Pts</th>
+                        <th>form</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Model.Table(g))
+                    {
+                        <tr class="@(r.Position <= 2 ? "row-qualify" : "")">
+                            <td class="pos">@r.Position</td>
+                            <td class="nowrap">
+                                <a class="@r.Team.ColourClass" href="/Home/Team/@r.Team.Code">@r.Team.Code</a>
+                                <span class="muted">@r.Team.Name</span>
+                            </td>
+                            <td class="num">@r.Played</td>
+                            <td class="num">@(r.GoalDifference > 0 ? "+" : "")@r.GoalDifference</td>
+                            <td class="num pts">@r.Points</td>
+                            <td class="form">@Html.Raw(TerminalArt.FormHtml(r.Form))</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<div class="grid cols-2 mt">
+    <div class="panel">
+        <div class="panel-title">incoming fixtures</div>
+        @foreach (var m in Model.Upcoming(8))
+        {
+            <div class="fixture">
+                <span class="when">@m.KickOff.ToString("ddd dd HH:mm")</span>
+                <span class="home"><a class="@m.Home.ColourClass" href="/Home/Team/@m.Home.Code">@m.Home.Name</a></span>
+                <span class="vs">vs</span>
+                <span><a class="@m.Away.ColourClass" href="/Home/Team/@m.Away.Code">@m.Away.Name</a></span>
+                <span class="stage">@m.StageLabel</span>
+            </div>
+        }
+        <div class="mt"><a class="back-link" href="/Home/Fixtures">› full schedule &amp; results</a></div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">team intelligence · power index</div>
+        <div class="hint mb">overall = mean of the five sentiment-derived dimensions</div>
+        @foreach (var t in topOverall)
+        {
+            <div class="statrow" style="margin-bottom:4px">
+                <span class="stat-lbl" style="width:120px">
+                    <a class="@t.ColourClass" href="/Home/Team/@t.Code">@t.Name</a>
+                </span>
+                <span class="stat-bar">@Html.Raw(TerminalArt.BarHtml(t.Stats.Overall, 100, 26, "d-che"))</span>
+                <span class="stat-val">@t.Stats.Overall.ToString("0.0")</span>
+            </div>
+        }
+        <div class="mt hint">strongest defence:
+            <a class="@topDefense.ColourClass" href="/Home/Team/@topDefense.Code">@topDefense.Name</a>
+            (@topDefense.Stats.Defense.ToString("0.0"))
+        </div>
+    </div>
+</div>
