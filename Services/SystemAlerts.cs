@@ -19,6 +19,12 @@ public class SystemAlertProvider
 
     public IReadOnlyList<SystemAlert> Active => _status.Mode switch
     {
+        DataMode.Archived => new List<SystemAlert>
+        {
+            new("tournament complete · final results",
+                $"Scores, scorers, cards, lineups and match statistics are the feed's final data (captured {_status.LastSuccessUtc:dd MMM yyyy}); squads, coaches and pre-tournament FIFA rankings come from the published tournament squads. Heat-maps, scouting prose, commentary and the sentiment-derived team ratings are modelled.",
+                "warn"),
+        },
         DataMode.Live => new List<SystemAlert>
         {
             new("live feed active · modelled detail",

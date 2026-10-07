@@ -23,7 +23,7 @@
     </div>
 }
 
-<div class="grid cols-2">
+<div class="grid @(upcoming.Any() ? "cols-2" : "")">
     <div class="panel">
         <div class="panel-title">results · played</div>
         <div class="hint mb">click a fixture for the match centre &amp; possession heat-maps</div>
@@ -43,22 +43,25 @@
         }
     </div>
 
-    <div class="panel">
-        <div class="panel-title">incoming · scheduled</div>
-        <div class="hint mb">all times UTC</div>
-        @foreach (var dayGroup in upcoming.GroupBy(m => m.KickOff.Date).OrderBy(g => g.Key))
-        {
-            <div class="dim" style="margin:10px 0 2px;letter-spacing:1px">@dayGroup.Key.ToString("dddd dd MMM")</div>
-            @foreach (var m in dayGroup.OrderBy(m => m.KickOff))
+    @if (upcoming.Any())
+    {
+        <div class="panel">
+            <div class="panel-title">incoming · scheduled</div>
+            <div class="hint mb">all times UTC</div>
+            @foreach (var dayGroup in upcoming.GroupBy(m => m.KickOff.Date).OrderBy(g => g.Key))
             {
-                <div class="fixture">
-                    <span class="when">@m.KickOff.ToString("HH:mm")</span>
-                    <span class="home"><a class="@m.Home.ColourClass" href="/Home/Team/@m.Home.Code">@m.Home.Name</a></span>
-                    <span class="vs">vs</span>
-                    <span><a class="@m.Away.ColourClass" href="/Home/Team/@m.Away.Code">@m.Away.Name</a></span>
-                    <span class="stage">@m.StageLabel · @m.Venue</span>
-                </div>
+                <div class="dim" style="margin:10px 0 2px;letter-spacing:1px">@dayGroup.Key.ToString("dddd dd MMM")</div>
+                @foreach (var m in dayGroup.OrderBy(m => m.KickOff))
+                {
+                    <div class="fixture">
+                        <span class="when">@m.KickOff.ToString("HH:mm")</span>
+                        <span class="home"><a class="@m.Home.ColourClass" href="/Home/Team/@m.Home.Code">@m.Home.Name</a></span>
+                        <span class="vs">vs</span>
+                        <span><a class="@m.Away.ColourClass" href="/Home/Team/@m.Away.Code">@m.Away.Name</a></span>
+                        <span class="stage">@m.StageLabel · @m.Venue</span>
+                    </div>
+                }
             }
-        }
-    </div>
+        </div>
+    }
 </div>

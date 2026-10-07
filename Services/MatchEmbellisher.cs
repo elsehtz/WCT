@@ -76,7 +76,8 @@ public class MatchEmbellisher
 
     private static string SubDetail(MatchEvent e) => e.Detail.Length > 0 ? $"({e.Detail})" : "";
 
-    private static double StrengthFactor(Team t) => 1 + (48 - t.FifaRank) / 96.0;   // 1.0 .. ~1.5
+    // Real FIFA ranks run past 48 (up to ~85 for this field); everything outside the top 48 counts alike.
+    private static double StrengthFactor(Team t) => 1 + (48 - Math.Min(t.FifaRank, 48)) / 96.0;   // 1.0 .. ~1.5
 
     private static double PossTendency(Archetype arch) => arch switch
     {

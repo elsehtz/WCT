@@ -518,6 +518,7 @@ ul.clean li { padding: 2px 0; border-bottom: 1px dotted var(--grid); }
 .blink.feed-live { color: var(--green); }
 .blink.feed-cached { color: var(--amber); }
 .blink.feed-sim { color: var(--fg-mute); animation: none; }
+.blink.feed-archived { color: var(--amber); animation: none; }
 .live-chip { color: var(--green); font-size: 12px; letter-spacing: 1px; }
 .live-chip .blink { color: var(--green); }
 

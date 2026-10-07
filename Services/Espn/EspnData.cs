@@ -44,4 +44,7 @@ public class LiveDataSet
     /// <summary>Per-event summaries keyed by event id. Finished-match entries are immutable,
     /// so they survive across refreshes and are never re-fetched.</summary>
     public Dictionary<string, EsSummary> Summaries { get; set; } = new();
+
+    /// <summary>True once the final has been played — from then on the data set never changes.</summary>
+    public bool IsTournamentComplete() => Matches.Any(m => m.StageSlug == "final" && m.Completed);
 }

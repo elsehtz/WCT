@@ -1,14 +1,16 @@
 namespace WorldCupTerminal.Models;
 
-public record Coach(string Name, string Nationality);
+/// <param name="Note">Optional context, e.g. a mid-tournament change of coach.</param>
+public record Coach(string Name, string Nationality, string? Note = null);
 
 public class Player
 {
     public required string Name { get; init; }
     public Position Position { get; init; }
     public int Number { get; init; }
+    /// <summary>Age in years; 0 when unknown.</summary>
     public int Age { get; init; }
-    // National-team feeds don't carry club data, so "—" is the live-mode default.
+    // The feed carries no club data; live mode fills it from the reference squads, else "—".
     public string Club { get; init; } = "—";
     public int Goals { get; set; }
     public int Assists { get; set; }
@@ -98,7 +100,7 @@ public class Team
     public int Comebacks { get; set; }     // matches where the team trailed at HT and did not lose
 
     public bool CoachIsForeign => !string.Equals(Coach.Nationality, Country, StringComparison.OrdinalIgnoreCase);
-    public double AverageAge => Players.Count == 0 ? 0 : Players.Average(p => p.Age);
+    public double AverageAge => Players.Where(p => p.Age > 0).Select(p => (double)p.Age).DefaultIfEmpty(0).Average();
 
     public string ColourClass { get; set; } = "c-green";   // accent for this team in the UI
 }

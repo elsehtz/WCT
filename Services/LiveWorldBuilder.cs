@@ -7,15 +7,21 @@ namespace WorldCupTerminal.Services;
 /// <summary>
 /// Maps a scraped <see cref="LiveDataSet"/> to the domain: real teams (with squads drawn
 /// from matchday rosters), real matches (scores, half splits derived from goal minutes,
-/// lineups, event timelines) and the real knockout bracket. Personality that the feed cannot
-/// provide (archetype, coach, scouting prose) comes from the curated profiles / prose banks,
-/// deterministically seeded so refreshes are stable.
+/// lineups, event timelines) and the real knockout bracket. FIFA ranking, coach, confederation
+/// and the registered squads (ages, clubs) come from <see cref="ReferenceData"/>. Personality
+/// that no source provides (archetype, scouting prose) comes from the curated profiles / prose
+/// banks, deterministically seeded so refreshes are stable.
 /// </summary>
 public class LiveWorldBuilder
 {
+    private readonly ReferenceData _reference;
     private readonly ILogger<LiveWorldBuilder> _log;
 
-    public LiveWorldBuilder(ILogger<LiveWorldBuilder> log) => _log = log;
+    public LiveWorldBuilder(ReferenceData reference, ILogger<LiveWorldBuilder> log)
+    {
+        _reference = reference;
+        _log = log;
+    }
 
     public (List<Team> Teams, List<Match> Matches, IReadOnlyList<BracketSlot> Bracket) Build(LiveDataSet data)
     {
@@ -47,8 +53,8 @@ public class LiveWorldBuilder
 
     private Dictionary<string, Team> BuildTeams(LiveDataSet data, Dictionary<string, string> groupByTeamId)
     {
-        // Performance-based pseudo-rank (the feed has no FIFA ranks): points → GD → GF, all
-        // played matches. Deterministic given the same results.
+        // Performance-based pseudo-rank, used only for teams missing from the reference data
+        // (the feed has no FIFA ranks): points → GD → GF over played matches.
         var perf = new Dictionary<string, (int Pts, int Gd, int Gf)>();
         foreach (var em in data.Matches.Where(m => m.Completed))
         {
@@ -74,24 +80,31 @@ public class LiveWorldBuilder
         {
             var profile = profiles.GetValueOrDefault(et.Name);
             var code = et.Abbrev.Length > 0 ? et.Abbrev : et.Name[..Math.Min(3, et.Name.Length)].ToUpperInvariant();
+            var reference = _reference.Get(code);
             var archetype = profile?.Arch
                 ?? (Archetype)(Math.Abs(ProseBank.Seed(code)) % Enum.GetValues<Archetype>().Length);
+
+            // A coach listed without a nationality is a native of the country they manage.
+            var coach = reference is not null
+                ? new Coach(reference.Coach, reference.CoachNationality ?? et.Name, reference.CoachNote)
+                : profile is not null ? new Coach(profile.CoachName, profile.CoachNat) : new Coach("TBC", et.Name);
 
             var team = new Team
             {
                 Name = et.Name,
                 Code = code,
                 Country = et.Name,
-                Confederation = profile?.Conf ?? "FIFA",
+                Confederation = reference?.Confederation ?? profile?.Conf ?? "FIFA",
                 Group = groupByTeamId.GetValueOrDefault(et.Id, "?"),
                 ExternalId = et.Id,
-                FifaRank = rankOrder.GetValueOrDefault(et.Id, data.Teams.Count),
+                FifaRank = reference?.FifaRank ?? rankOrder.GetValueOrDefault(et.Id, data.Teams.Count),
                 Archetype = archetype,
-                Coach = profile is not null ? new Coach(profile.CoachName, profile.CoachNat) : new Coach("TBC", et.Name),
+                Coach = coach,
                 StyleNote = ProseBank.StyleNote(et.Name, archetype),
                 ColourClass = TournamentData.AccentFor(code),
             };
-            BuildSquad(team, et.Id, data);
+            if (reference is null) _log.LogWarning("No reference data for {Code}; rank/coach/squad are modelled", code);
+            BuildSquad(team, et.Id, data, reference);
             teams[et.Id] = team;
         }
         return teams;
@@ -103,8 +116,13 @@ public class LiveWorldBuilder
         perf[id] = (cur.Pts + (gf > ga ? 3 : gf == ga ? 1 : 0), cur.Gd + gf - ga, cur.Gf + gf);
     }
 
-    /// <summary>Squad = union of players seen in this team's matchday rosters (latest entry wins).</summary>
-    private static void BuildSquad(Team team, string teamId, LiveDataSet data)
+    /// <summary>
+    /// Squad = the registered 26 from the reference data when available (real positions, ages
+    /// and clubs), otherwise the union of players seen in this team's matchday rosters. Registered
+    /// players take the feed's spelling of their name (matched by shirt number) so timeline
+    /// events and lineups — which use the feed's spelling — resolve to the same player.
+    /// </summary>
+    private static void BuildSquad(Team team, string teamId, LiveDataSet data, RefTeam? reference)
     {
         var seen = new Dictionary<string, EsRosterEntry>();
         foreach (var summary in data.Summaries.Values)
@@ -118,34 +136,96 @@ public class LiveWorldBuilder
                         seen[entry.Name] = entry;
                 }
 
-        foreach (var entry in seen.Values)
+        if (reference is not null)
         {
-            var rng = new Random(ProseBank.Seed(entry.Name + team.Code));
-            var player = new Player
+            var unmatched = seen.Values.ToList();
+            foreach (var rp in reference.Players)
             {
-                Name = entry.Name,
-                Position = ParsePosition(entry.Position),
-                Number = entry.Jersey,
-                // The feed carries no ages; a plausible, stable value keeps the squad table alive.
-                Age = 22 + rng.Next(0, 14),
-            };
+                // Tournament shirt numbers are registered and fixed, so they are the join key; the
+                // spellings differ too often ("Manaf Younis" / "Munaf Younus", "Kaku") to rely on.
+                // A shared name token only rescues a feed entry with a missing/odd number.
+                var feed = unmatched.FirstOrDefault(e => e.Jersey == rp.Number)
+                    ?? unmatched.FirstOrDefault(e => e.Jersey <= 0 && SameName(e.Name, rp.Name));
+                if (feed is not null) unmatched.Remove(feed);
 
-            var bank = ProseBank.NoteBank[team.Archetype];
-            var a = bank[rng.Next(bank.Length)];
-            string b;
-            do { b = bank[rng.Next(bank.Length)]; } while (b == a);
-            player.ScoutNotes.Add($"{entry.Name} is {a}.");
-            if (rng.Next(6) == 0)
-                player.ScoutNotes.Add($"{entry.Name} {ProseBank.Weaknesses[rng.Next(ProseBank.Weaknesses.Length)]}.");
-            else
-                player.ScoutNotes.Add($"{entry.Name} is {b}.");
-
-            team.Players.Add(player);
+                var name = feed?.Name ?? rp.Name;
+                var player = new Player
+                {
+                    Name = name,
+                    Position = ParsePosition(rp.Pos),
+                    Number = rp.Number,
+                    Age = rp.Dob is DateOnly dob ? ReferenceData.AgeAt(dob, ReferenceData.TournamentStart) : 0,
+                    Club = rp.Club.Length > 0 ? rp.Club : "—",
+                };
+                AddScoutNotes(player, team);
+                team.Players.Add(player);
+            }
+            // Anyone the feed fielded who isn't registered (shouldn't happen) still gets a row.
+            foreach (var entry in unmatched)
+            {
+                var player = new Player { Name = entry.Name, Position = ParsePosition(entry.Position), Number = entry.Jersey };
+                AddScoutNotes(player, team);
+                team.Players.Add(player);
+            }
+        }
+        else
+        {
+            foreach (var entry in seen.Values)
+            {
+                var rng = new Random(ProseBank.Seed(entry.Name + team.Code));
+                var player = new Player
+                {
+                    Name = entry.Name,
+                    Position = ParsePosition(entry.Position),
+                    Number = entry.Jersey,
+                    // No reference squad: a plausible, stable value keeps the squad table alive.
+                    Age = 22 + rng.Next(0, 14),
+                };
+                AddScoutNotes(player, team);
+                team.Players.Add(player);
+            }
         }
 
         team.Players.Sort((x, y) => x.Position != y.Position
             ? x.Position.CompareTo(y.Position)
             : x.Number.CompareTo(y.Number));
+    }
+
+    /// <summary>Modelled scouting prose (no source publishes this) — the sentiment pipeline's input.</summary>
+    private static void AddScoutNotes(Player player, Team team)
+    {
+        var rng = new Random(ProseBank.Seed(player.Name + team.Code));
+        var bank = ProseBank.NoteBank[team.Archetype];
+        var a = bank[rng.Next(bank.Length)];
+        string b;
+        do { b = bank[rng.Next(bank.Length)]; } while (b == a);
+        player.ScoutNotes.Add($"{player.Name} is {a}.");
+        if (rng.Next(6) == 0)
+            player.ScoutNotes.Add($"{player.Name} {ProseBank.Weaknesses[rng.Next(ProseBank.Weaknesses.Length)]}.");
+        else
+            player.ScoutNotes.Add($"{player.Name} is {b}.");
+    }
+
+    /// <summary>Loose name match across sources ("Vini Jr." vs "Vinícius Júnior" won't match, but
+    /// "Unai Simón" vs "Unai Simon" will): any shared accent-folded token of 3+ letters.</summary>
+    private static bool SameName(string a, string b)
+    {
+        var tokens = Tokens(a);
+        return Tokens(b).Any(tokens.Contains);
+
+        static HashSet<string> Tokens(string s) =>
+            Fold(s).Split(new[] { ' ', '-', '.', '\'' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(t => t.Length >= 3).ToHashSet();
+    }
+
+    private static string Fold(string s)
+    {
+        var decomposed = s.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new System.Text.StringBuilder(decomposed.Length);
+        foreach (var ch in decomposed)
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                sb.Append(char.ToLowerInvariant(ch));
+        return sb.ToString();
     }
 
     /// <summary>Feed abbreviations are granular ("CD-L", "RB", "AM-R", "CF-L"); bench players
@@ -158,7 +238,7 @@ public class LiveWorldBuilder
         return a switch
         {
             "G" or "GK" => Position.GK,
-            "CD" or "CB" or "LB" or "RB" or "RWB" or "LWB" or "WB" or "D" or "SW" => Position.DF,
+            "DF" or "CD" or "CB" or "LB" or "RB" or "RWB" or "LWB" or "WB" or "D" or "SW" => Position.DF,
             "LM" or "RM" or "CM" or "AM" or "DM" or "M" or "MF" => Position.MF,
             "F" or "CF" or "FW" or "ST" or "SS" or "LW" or "RW" or "A" => Position.FW,
             _ => Position.MF,
@@ -168,7 +248,7 @@ public class LiveWorldBuilder
     private static void CountPlayerGoals(Dictionary<string, Team> teams, List<Match> matches)
     {
         var byTeam = teams.Values.GroupBy(t => t.Code).ToDictionary(g => g.Key,
-            g => g.First().Players.ToDictionary(p => p.Name));
+            g => g.First().Players.GroupBy(p => p.Name).ToDictionary(n => n.Key, n => n.First()));
 
         foreach (var m in matches)
             foreach (var e in m.Events.Where(e => e.Type is MatchEventType.Goal or MatchEventType.Penalty))
@@ -356,19 +436,20 @@ public class LiveWorldBuilder
                 : lineup.TeamId == away.ExternalId ? away : null;
             if (team is null || lineup.Entries.Count == 0) continue;
 
-            var squad = team.Players.ToDictionary(p => p.Name);
+            var squad = team.Players.GroupBy(p => p.Name).ToDictionary(g => g.Key, g => g.First());
+            var byNumber = team.Players.Where(p => p.Number > 0).GroupBy(p => p.Number).ToDictionary(g => g.Key, g => g.First());
             var result = new MatchLineup { Formation = lineup.Formation };
             foreach (var entry in lineup.Entries.Where(e => e.Starter).OrderBy(e => e.FormationPlace))
-                result.Starters.Add(Resolve(squad, entry));
+                result.Starters.Add(Resolve(squad, byNumber, entry));
             foreach (var entry in lineup.Entries.Where(e => !e.Starter).OrderBy(e => e.Jersey))
-                result.Bench.Add(Resolve(squad, entry));
+                result.Bench.Add(Resolve(squad, byNumber, entry));
 
             if (match.Home == team) match.HomeLineup = result;
             else match.AwayLineup = result;
         }
 
-        static Player Resolve(Dictionary<string, Player> squad, EsRosterEntry entry) =>
-            squad.GetValueOrDefault(entry.Name) ?? new Player
+        static Player Resolve(Dictionary<string, Player> squad, Dictionary<int, Player> byNumber, EsRosterEntry entry) =>
+            squad.GetValueOrDefault(entry.Name) ?? byNumber.GetValueOrDefault(entry.Jersey) ?? new Player
             {
                 Name = entry.Name,
                 Position = ParsePosition(entry.Position),
@@ -404,9 +485,38 @@ public class LiveWorldBuilder
         match.HomeCards = homeCards ?? match.Events.Count(e => IsCard(e) && e.TeamCode == home.Code);
         match.AwayCards = awayCards ?? match.Events.Count(e => IsCard(e) && e.TeamCode == away.Code);
 
+        var homeLine = summary?.Stats.FirstOrDefault(l => l.TeamId == home.ExternalId)?.Values;
+        var awayLine = summary?.Stats.FirstOrDefault(l => l.TeamId == away.ExternalId)?.Values;
+        if (homeLine is not null && awayLine is not null)
+        {
+            foreach (var (label, key) in FeedStatLines)
+                if (homeLine.TryGetValue(key, out var h) && awayLine.TryGetValue(key, out var a))
+                    match.FeedStats.Add(new MatchStatLine(label, h, a));
+            if (PassAccuracy(homeLine) is string hp && PassAccuracy(awayLine) is string ap)
+                match.FeedStats.Add(new MatchStatLine("Pass accuracy %", hp, ap));
+        }
+
         static bool IsCard(MatchEvent e) =>
             e.Type is MatchEventType.YellowCard or MatchEventType.SecondYellow or MatchEventType.RedCard;
     }
+
+    /// <summary>Boxscore lines shown in the match centre, in display order (label, feed stat name).</summary>
+    private static readonly (string Label, string Key)[] FeedStatLines =
+    {
+        ("Shots", "totalShots"),
+        ("Shots on target", "shotsOnTarget"),
+        ("Corners", "wonCorners"),
+        ("Fouls", "foulsCommitted"),
+        ("Offsides", "offsides"),
+        ("Saves", "saves"),
+    };
+
+    /// <summary>The feed rounds passPct to one decimal of a fraction ("0.9"), so derive it from the counts.</summary>
+    private static string? PassAccuracy(Dictionary<string, string> line) =>
+        line.TryGetValue("accuratePasses", out var acc) && line.TryGetValue("totalPasses", out var tot)
+        && int.TryParse(acc, out var a) && int.TryParse(tot, out var t) && t > 0
+            ? Math.Round(100.0 * a / t).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : null;
 
     // ------------------------------------------------------------------ bracket
 

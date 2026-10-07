@@ -8,6 +8,8 @@ public enum DataMode
     Simulated,
     CachedLive,
     Live,
+    /// <summary>The tournament is over: real final results served from the archive/cache, no polling.</summary>
+    Archived,
 }
 
 /// <summary>

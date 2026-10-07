@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 
@@ -36,10 +37,37 @@ public class EspnClient : IEspnClient
         return doc is null ? null : EspnParser.ParseTeams(doc.RootElement);
     }
 
+    /// <summary>
+    /// ESPN now answers date-range scoreboard queries for this competition with HTTP 400, so the
+    /// tournament window is walked one day at a time and merged by event id (a late kick-off can
+    /// appear under two calendar days). Any failed day voids the whole result — a partial
+    /// schedule must never replace a complete one.
+    /// </summary>
     public async Task<List<EsMatch>?> GetScoreboardAsync(CancellationToken ct)
     {
-        using var doc = await GetJsonAsync($"scoreboard?dates={_options.TournamentDates}&limit=250", ct);
-        return doc is null ? null : EspnParser.ParseScoreboard(doc.RootElement);
+        var (from, to) = ParseDateRange(_options.TournamentDates);
+        var byId = new Dictionary<string, EsMatch>();
+        for (var day = from; day <= to; day = day.AddDays(1))
+        {
+            using var doc = await GetJsonAsync($"scoreboard?dates={day:yyyyMMdd}", ct);
+            if (doc is null)
+            {
+                _log.LogWarning("Scoreboard for {Day:yyyy-MM-dd} unavailable — abandoning this scrape", day);
+                return null;
+            }
+            foreach (var m in EspnParser.ParseScoreboard(doc.RootElement))
+                byId[m.EventId] = m;
+        }
+        return byId.Values.OrderBy(m => m.KickOffUtc).ToList();
+    }
+
+    /// <summary>"YYYYMMDD-YYYYMMDD" (or a single "YYYYMMDD") → inclusive date range.</summary>
+    private static (DateOnly From, DateOnly To) ParseDateRange(string range)
+    {
+        var parts = range.Split('-', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var from = DateOnly.ParseExact(parts[0], "yyyyMMdd", CultureInfo.InvariantCulture);
+        var to = parts.Length > 1 ? DateOnly.ParseExact(parts[1], "yyyyMMdd", CultureInfo.InvariantCulture) : from;
+        return (from, to);
     }
 
     public async Task<EsSummary?> GetSummaryAsync(string eventId, CancellationToken ct)

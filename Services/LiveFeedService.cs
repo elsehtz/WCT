@@ -41,6 +41,9 @@ public class LiveFeedService
     /// <summary>Age of the newest data we hold (cache or last scrape); null when none.</summary>
     public DateTime? LastFetchUtc => _lastData?.FetchedAtUtc;
 
+    /// <summary>True once the data we hold includes a played final.</summary>
+    public bool TournamentComplete => _lastData?.IsTournamentComplete() == true;
+
     /// <summary>Publish the cache file, if present, so a restart renders live data instantly.</summary>
     public bool TryLoadCache()
     {
@@ -142,6 +145,9 @@ public class LiveFeedService
 
     private void Publish(LiveDataSet data, DataMode mode)
     {
+        // A finished tournament is final whichever way it arrived (scrape, cache or archive).
+        if (data.IsTournamentComplete()) mode = DataMode.Archived;
+
         var (teams, matches, bracket) = _worldBuilder.Build(data);
         _embellisher.EmbellishAll(matches);
         var snapshot = _snapshotBuilder.Build(teams, matches, mode, bracket);

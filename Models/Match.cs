@@ -37,6 +37,9 @@ public class Match
     public int HomeCards { get; set; }
     public int AwayCards { get; set; }
 
+    /// <summary>Further boxscore lines from the feed (shots, corners, fouls…); empty when the feed had none.</summary>
+    public List<MatchStatLine> FeedStats { get; } = new();
+
     public MatchLineup? HomeLineup { get; set; }
     public MatchLineup? AwayLineup { get; set; }
 
@@ -99,6 +102,9 @@ public class MatchLineup
 /// <summary>One timeline entry. MinuteDisplay preserves stoppage-time notation ("45'+2").</summary>
 public record MatchEvent(int Minute, string MinuteDisplay, MatchEventType Type,
     string TeamCode, string PlayerName, string Detail);
+
+/// <summary>One boxscore comparison row, values preformatted for display.</summary>
+public record MatchStatLine(string Label, string Home, string Away);
 
 /// <summary>One row of a group table.</summary>
 public class GroupStanding
