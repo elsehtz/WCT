@@ -31,6 +31,7 @@ builder.Services.AddTransient<IEspnClient>(sp =>
         ? sp.GetRequiredService<FixtureFileEspnClient>()
         : sp.GetRequiredService<EspnClient>());
 builder.Services.AddSingleton<LiveDataCache>();
+builder.Services.AddSingleton<ReferenceData>();
 builder.Services.AddSingleton<LiveWorldBuilder>();
 builder.Services.AddSingleton<MatchEmbellisher>();
 builder.Services.AddSingleton<LiveFeedStatus>();

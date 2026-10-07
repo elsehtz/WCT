@@ -45,6 +45,8 @@ public class LiveFeedScheduler : BackgroundService
         {
             _feed.TryLoadCache();
 
+            if (StopPolling()) return;
+
             var age = DateTime.UtcNow - (_feed.LastFetchUtc ?? DateTime.MinValue);
             if (age > TimeSpan.FromHours(_options.StaleAfterHours))
             {
@@ -54,6 +56,8 @@ public class LiveFeedScheduler : BackgroundService
 
             while (!ct.IsCancellationRequested)
             {
+                if (StopPolling()) return;
+
                 var next = ComputeNextRefreshUtc(DateTime.UtcNow, _options.DailyRefreshUtcHour);
                 _status.NextRefreshUtc = next;
                 _log.LogInformation("Next live refresh scheduled for {Next:u}", next);
@@ -68,6 +72,15 @@ public class LiveFeedScheduler : BackgroundService
         {
             // normal shutdown
         }
+    }
+
+    /// <summary>Finished results never change, so once the final is in hand the feed is left alone.</summary>
+    private bool StopPolling()
+    {
+        if (!_feed.TournamentComplete || _options.RefreshAfterCompletion) return false;
+        _status.NextRefreshUtc = null;
+        _log.LogInformation("Tournament complete — serving final results without further scrapes");
+        return true;
     }
 
     /// <summary>The next daily refresh instant: today at the configured UTC hour, or tomorrow.</summary>

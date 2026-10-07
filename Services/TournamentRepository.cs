@@ -89,4 +89,52 @@ public class TournamentRepository
     }
 
     public IEnumerable<BracketSlot> SlotsFor(Stage stage) => Current.Bracket.Where(s => s.Stage == stage);
+
+    /// <summary>The played final, once there is one.</summary>
+    public Match? FinalMatch => Current.Matches.FirstOrDefault(m => m.Stage == Stage.Final && m.Played);
+
+    public Match? ThirdPlaceMatch => Current.Matches.FirstOrDefault(m => m.Stage == Stage.ThirdPlace && m.Played);
+
+    public bool IsComplete => FinalMatch is not null;
+
+    /// <summary>Goal-scorers ranked by goals (own goals excluded), ties by fewer penalties then name.</summary>
+    public IReadOnlyList<(string Player, Team Team, int Goals, int Penalties)> TopScorers(int take)
+    {
+        var snapshot = Current;
+        return snapshot.Matches.Where(m => m.Played)
+            .SelectMany(m => m.Events)
+            .Where(e => e.Type is MatchEventType.Goal or MatchEventType.Penalty && e.PlayerName.Length > 0)
+            .GroupBy(e => (e.PlayerName, e.TeamCode))
+            .Select(g => (Player: g.Key.PlayerName, Team: snapshot.ByCode.GetValueOrDefault(g.Key.TeamCode),
+                Goals: g.Count(), Penalties: g.Count(e => e.Type == MatchEventType.Penalty)))
+            .Where(s => s.Team is not null)
+            .OrderByDescending(s => s.Goals).ThenBy(s => s.Penalties).ThenBy(s => s.Player)
+            .Take(take)
+            .Select(s => (s.Player, s.Team!, s.Goals, s.Penalties))
+            .ToList();
+    }
+
+    /// <summary>
+    /// How far a team got: "champions", "runners-up", "third place", "fourth place", or the round
+    /// it went out in. Null while the team is still alive (or, before any knockout, still in its group).
+    /// </summary>
+    public string? FinishFor(Team t)
+    {
+        var knockouts = MatchesFor(t).Where(m => m.Stage != Stage.Group && m.Played).ToList();
+        var last = knockouts.OrderByDescending(m => m.Stage).ThenByDescending(m => m.KickOff).FirstOrDefault();
+        if (last is null) return IsComplete || Current.Bracket.Any(s => s.Match?.Played == true) ? "group stage" : null;
+
+        bool won = last.Winner == t;
+        return last.Stage switch
+        {
+            Stage.Final => won ? "champions" : "runners-up",
+            Stage.ThirdPlace => won ? "third place" : "fourth place",
+            Stage.SemiFinal when won => null,   // awaiting the final
+            Stage.SemiFinal => IsComplete ? "semi-finals" : null,   // the 3rd-place match decides
+            _ when won => null,
+            Stage.RoundOf32 => "round of 32",
+            Stage.RoundOf16 => "round of 16",
+            _ => "quarter-finals",
+        };
+    }
 }

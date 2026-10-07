@@ -21,6 +21,8 @@
     rows.Add(("Set-piece goals", m.HomeSetPieceGoals.ToString(), m.AwaySetPieceGoals.ToString()));
     rows.Add(("Possession %",    m.HomePossession.ToString(),    m.AwayPossession.ToString()));
     rows.Add(("Cards",           m.HomeCards.ToString(),         m.AwayCards.ToString()));
+    foreach (var line in m.FeedStats)
+        rows.Add((line.Label, line.Home, line.Away));
 
     string resultSuffix = m.WentToPenalties
         ? $"pens {m.HomePenalties}–{m.AwayPenalties}"

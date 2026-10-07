@@ -5,7 +5,9 @@
     var goals = Model.Matches.Where(m => m.Played).Sum(m => m.HomeGoals + m.AwayGoals);
     var avg = played == 0 ? 0 : (double)goals / played;
     var foreignCoaches = Model.Teams.Count(t => t.CoachIsForeign);
-    var topAttack = Model.Teams.OrderByDescending(t => t.Stats.Offense).First();
+    var topAttack = Model.Teams.OrderByDescending(t => t.GoalsFor).ThenBy(t => t.GoalsAgainst).First();
+    var final = Model.FinalMatch;
+    var third = Model.ThirdPlaceMatch;
     var topDefense = Model.Teams.OrderByDescending(t => t.Stats.Defense).First();
     var topOverall = Model.Teams.OrderByDescending(t => t.Stats.Overall).Take(6).ToList();
 }
@@ -14,7 +16,7 @@
     <div class="panel center">
         <div class="panel-title">matches</div>
         <div class="big-num">@played</div>
-        <div class="muted">played · @Model.Upcoming().Count upcoming</div>
+        <div class="muted">played · @(Model.IsComplete ? "tournament complete" : $"{Model.Upcoming().Count} upcoming")</div>
     </div>
     <div class="panel center">
         <div class="panel-title">goals</div>
@@ -24,7 +26,7 @@
     <div class="panel center">
         <div class="panel-title">top attack</div>
         <div class="big-num"><a class="@topAttack.ColourClass" href="/Home/Team/@topAttack.Code">@topAttack.Code</a></div>
-        <div class="muted">offense @topAttack.Stats.Offense.ToString("0.0")</div>
+        <div class="muted">@topAttack.GoalsFor goals scored</div>
     </div>
     <div class="panel center">
         <div class="panel-title">foreign coaches</div>
@@ -69,20 +71,71 @@
 </div>
 
 <div class="grid cols-2 mt">
-    <div class="panel">
-        <div class="panel-title">incoming fixtures</div>
-        @foreach (var m in Model.Upcoming(8))
-        {
-            <div class="fixture">
-                <span class="when">@m.KickOff.ToString("ddd dd HH:mm")</span>
-                <span class="home"><a class="@m.Home.ColourClass" href="/Home/Team/@m.Home.Code">@m.Home.Name</a></span>
-                <span class="vs">vs</span>
-                <span><a class="@m.Away.ColourClass" href="/Home/Team/@m.Away.Code">@m.Away.Name</a></span>
-                <span class="stage">@m.StageLabel</span>
+    @if (final is not null)
+    {
+        var champion = final.Winner!;
+        var runnerUp = champion == final.Home ? final.Away : final.Home;
+        <div class="panel">
+            <div class="panel-title">tournament complete · champions</div>
+            <div class="center">
+                <div class="big-num"><a class="@champion.ColourClass" href="/Home/Team/@champion.Code">@champion.Name.ToUpperInvariant()</a></div>
+                <div class="muted">world champions 2026</div>
             </div>
-        }
-        <div class="mt"><a class="back-link" href="/Home/Fixtures">› full schedule &amp; results</a></div>
-    </div>
+            <a class="fixture mt" href="/Home/Match/@final.Id" style="text-decoration:none">
+                <span class="when">FINAL</span>
+                <span class="home"><span class="@final.Home.ColourClass">@final.Home.Name</span></span>
+                <span class="score">@final.HomeGoals&#8202;-&#8202;@final.AwayGoals</span>
+                <span><span class="@final.Away.ColourClass">@final.Away.Name</span></span>
+                <span class="stage">@(final.WentToPenalties ? $"({final.HomePenalties}-{final.AwayPenalties} pens)" : final.WentToExtraTime ? "aet" : "")</span>
+            </a>
+            @if (third is not null)
+            {
+                <a class="fixture" href="/Home/Match/@third.Id" style="text-decoration:none">
+                    <span class="when">3RD</span>
+                    <span class="home"><span class="@third.Home.ColourClass">@third.Home.Name</span></span>
+                    <span class="score">@third.HomeGoals&#8202;-&#8202;@third.AwayGoals</span>
+                    <span><span class="@third.Away.ColourClass">@third.Away.Name</span></span>
+                    <span class="stage">@(third.WentToPenalties ? $"({third.HomePenalties}-{third.AwayPenalties} pens)" : third.WentToExtraTime ? "aet" : "")</span>
+                </a>
+            }
+            <dl class="kv mt">
+                <dt>runners-up</dt><dd><a class="@runnerUp.ColourClass" href="/Home/Team/@runnerUp.Code">@runnerUp.Name</a></dd>
+                @if (third?.Winner is Team bronze)
+                {
+                    <dt>third place</dt><dd><a class="@bronze.ColourClass" href="/Home/Team/@bronze.Code">@bronze.Name</a></dd>
+                }
+            </dl>
+
+            <div class="hint mt">top scorers · goals from the match timelines (pens in brackets)</div>
+            @foreach (var s in Model.TopScorers(8))
+            {
+                <div class="statrow">
+                    <span class="stat-lbl" style="width:200px">@s.Player</span>
+                    <a class="@s.Team.ColourClass" href="/Home/Team/@s.Team.Code" style="width:44px">@s.Team.Code</a>
+                    <span class="stat-val pts">@s.Goals</span>
+                    <span class="muted">@(s.Penalties > 0 ? $"({s.Penalties})" : "")</span>
+                </div>
+            }
+            <div class="mt"><a class="back-link" href="/Home/Fixtures">› all results</a></div>
+        </div>
+    }
+    else
+    {
+        <div class="panel">
+            <div class="panel-title">incoming fixtures</div>
+            @foreach (var m in Model.Upcoming(8))
+            {
+                <div class="fixture">
+                    <span class="when">@m.KickOff.ToString("ddd dd HH:mm")</span>
+                    <span class="home"><a class="@m.Home.ColourClass" href="/Home/Team/@m.Home.Code">@m.Home.Name</a></span>
+                    <span class="vs">vs</span>
+                    <span><a class="@m.Away.ColourClass" href="/Home/Team/@m.Away.Code">@m.Away.Name</a></span>
+                    <span class="stage">@m.StageLabel</span>
+                </div>
+            }
+            <div class="mt"><a class="back-link" href="/Home/Fixtures">› full schedule &amp; results</a></div>
+        </div>
+    }
 
     <div class="panel">
         <div class="panel-title">team intelligence · power index</div>

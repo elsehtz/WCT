@@ -6,6 +6,7 @@
     var fixtures = Repo.MatchesFor(t);
     var standing = Repo.Table(t.Group).FirstOrDefault(r => r.Team == t);
     var momentum = Repo.Momentum(t);
+    var finish = Repo.FinishFor(t);
     var sent = t.Sentiment;
     double sMax = Math.Max(1, sent.Raw.Values.DefaultIfEmpty(1).Max());
 
@@ -29,7 +30,7 @@
             <span class="@t.ColourClass" style="font-size:26px;font-weight:700">@t.Name</span>
             <span class="muted">· group @t.Group · @t.Confederation</span>
         </div>
-        <div class="muted nowrap">FIFA #@t.FifaRank · squad age @t.AverageAge.ToString("0.0") · OVR <span class="pts">@t.Stats.Overall.ToString("0.0")</span></div>
+        <div class="muted nowrap"><span title="FIFA ranking before the tournament (April 2026)">FIFA #@t.FifaRank</span>@(finish is null ? "" : $" · finish: {finish}") · squad age @t.AverageAge.ToString("0.0") · OVR <span class="pts">@t.Stats.Overall.ToString("0.0")</span></div>
     </div>
     <div class="note mt" style="margin-top:6px">
         ▸ head coach <span class="lead">@t.Coach.Name</span>
@@ -41,9 +42,13 @@
         {
             <span class="muted">(@t.Coach.Nationality)</span>
         }
+        @if (t.Coach.Note is not null)
+        {
+            <span class="muted">· @t.Coach.Note</span>
+        }
         @if (standing is not null)
         {
-            <span class="muted"> · currently P@(standing.Played) W@(standing.Won) D@(standing.Drawn) L@(standing.Lost) · @standing.Points pts (pos @standing.Position)</span>
+            <span class="muted"> · @(Repo.IsComplete ? "group stage" : "currently") P@(standing.Played) W@(standing.Won) D@(standing.Drawn) L@(standing.Lost) · @standing.Points pts (pos @standing.Position)</span>
         }
     </div>
     <div class="note mt" style="margin-top:8px">@t.StyleNote</div>
@@ -110,7 +115,7 @@
     <div class="panel-title">squad · scouting notes</div>
     <table class="term squad">
         <thead>
-            <tr><th>#</th><th>pos</th><th>player</th><th>club</th><th class="num">age</th><th>scouting report</th></tr>
+            <tr><th>#</th><th>pos</th><th>player</th><th>club</th><th class="num" title="age on the opening day, 11 Jun 2026">age</th><th class="num" title="goals at this tournament (excl. own goals)">gls</th><th>scouting report</th></tr>
         </thead>
         <tbody>
             @foreach (var p in t.Players.OrderBy(p => p.Position))
@@ -120,7 +125,8 @@
                     <td class="pos-@p.Position">@p.Position</td>
                     <td class="nowrap">@p.Name</td>
                     <td class="muted nowrap">@p.Club</td>
-                    <td class="num">@p.Age</td>
+                    <td class="num">@(p.Age > 0 ? p.Age.ToString() : "—")</td>
+                    <td class="num @(p.Goals > 0 ? "pts" : "muted")">@p.Goals</td>
                     <td class="note">@string.Join(" ", p.ScoutNotes)</td>
                 </tr>
             }

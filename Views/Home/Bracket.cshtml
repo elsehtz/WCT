@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = "Bracket";
     bool live = Model.Mode != DataMode.Simulated;
+    bool complete = Model.IsComplete;
 
     var columns = new List<(Stage Stage, string Title)>();
     if (Model.SlotsFor(Stage.RoundOf32).Any()) columns.Add((Stage.RoundOf32, "ROUND OF 32"));
@@ -61,7 +62,7 @@
     }
 }
 
-<div class="section-head">▚ Knockout Bracket &nbsp;<span class="hint">@(live ? "real pairings from the feed · unresolved ties show placeholders" : "round of 16 provisionally seeded from current group tables · later rounds resolve as results land")</span></div>
+<div class="section-head">▚ Knockout Bracket &nbsp;<span class="hint">@(complete ? "final results · open any tie for the match centre" : live ? "real pairings from the feed · unresolved ties show placeholders" : "round of 16 provisionally seeded from current group tables · later rounds resolve as results land")</span></div>
 
 <div class="bracket">
     @foreach (var (stage, title) in columns)
@@ -88,7 +89,12 @@
 <div class="panel mt">
     <div class="panel-title">how the bracket works</div>
     <p class="note">
-        @if (live)
+        @if (complete)
+        {
+            <text>Every tie has been played — pairings, dates, scores, extra time and shoot-outs are the
+            feed's final results. Open any tie to view the match centre.</text>
+        }
+        else if (live)
         {
             <text>Pairings, dates and results come from the live feed on the daily sync. Ties that
             depend on unplayed matches show placeholder codes (e.g. <span class="dim">QFW3</span> =
